@@ -201,13 +201,12 @@ function createHouse() {
     return group;
 }
 
-// Define createTree function first since it's used by other functions
-function createTree(posX, posZ, isSecondIsland = false) {
-    const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 2, 8);
-    const trunkMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+// Create an enhanced tree with more realistic features
+function createTree(posX, posZ, isSecondIsland = false, treeType = 'random') {
+    // Create tree group to hold all components
+    const treeGroup = new THREE.Group();
     
-    // Calculate Y position based on the hill's surface
+    // Calculate Y position based on the hill's surface (keeping your original logic)
     let hillRadius, baseY, centerX = 0;
     
     if (isSecondIsland) {
@@ -215,7 +214,7 @@ function createTree(posX, posZ, isSecondIsland = false) {
         baseY = 21.5;
         centerX = -60;
     } else {
-        hillRadius = 15; // Changed to match second island size
+        hillRadius = 15; 
         baseY = 21.5;
         centerX = 0;
     }
@@ -233,19 +232,532 @@ function createTree(posX, posZ, isSecondIsland = false) {
         yPosition = -3;
     }
     
-    trunk.position.set(posX, yPosition, posZ);
-    trunk.castShadow = true;
-    scene.add(trunk);
+    // Randomly select tree type if not specified
+    if (treeType === 'random') {
+        const types = ['pine', 'oak', 'cypress', 'redwood'];
+        treeType = types[Math.floor(Math.random() * types.length)];
+    }
     
-    const leavesGeometry = new THREE.ConeGeometry(1, 3, 8);
-    const leavesMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0x228B22,
-        flatShading: true 
+    // Randomize tree size for natural variation
+    const sizeVariation = 0.7 + Math.random() * 0.6;
+    
+    // Create tree based on type
+    switch(treeType) {
+        case 'pine':
+            createPineTree(treeGroup, sizeVariation);
+            break;
+        case 'oak':
+            createOakTree(treeGroup, sizeVariation);
+            break;
+        case 'cypress':
+            createCypressTree(treeGroup, sizeVariation);
+            break;
+        case 'redwood':
+            createRedwoodTree(treeGroup, sizeVariation);
+            break;
+        default:
+            createPineTree(treeGroup, sizeVariation);
+    }
+    
+    // Position the entire tree group
+    treeGroup.position.set(posX, yPosition, posZ);
+    
+    // Add random rotation for variety
+    treeGroup.rotation.y = Math.random() * Math.PI * 2;
+    
+    // Add tree to scene
+    scene.add(treeGroup);
+    
+    return treeGroup;
+}
+
+// Creates a realistic pine tree
+function createPineTree(group, scale = 1) {
+    // Create a more detailed trunk with bark texture
+    const trunkGeometry = new THREE.CylinderGeometry(0.2 * scale, 0.3 * scale, 3 * scale, 12);
+    const trunkMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x8B4513,
+        shininess: 2,
+        flatShading: true
     });
-    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
-    leaves.position.set(posX, yPosition + 2.5, posZ);
-    leaves.castShadow = true;
-    scene.add(leaves);
+    
+    // Add noise to trunk vertices for more realistic bark
+    const trunkPositions = trunkGeometry.attributes.position;
+    for (let i = 0; i < trunkPositions.count; i++) {
+        const x = trunkPositions.getX(i);
+        const y = trunkPositions.getY(i);
+        const z = trunkPositions.getZ(i);
+        
+        // Don't modify top and bottom vertices
+        if (Math.abs(y) < 1.48 * scale) {
+            // Add some random bumps to simulate bark
+            const barkDepth = 0.02 * scale;
+            trunkPositions.setX(i, x + (Math.random() - 0.5) * barkDepth);
+            trunkPositions.setZ(i, z + (Math.random() - 0.5) * barkDepth);
+        }
+    }
+    
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    trunk.position.y = 1.5 * scale;
+    group.add(trunk);
+    
+    // Create multiple cones for a fuller pine tree look
+    const treeHeight = 7 * scale;
+    const numLayers = 5;
+    
+    for (let i = 0; i < numLayers; i++) {
+        const layerHeight = treeHeight / numLayers;
+        // Make cones wider at bottom, narrower at top
+        const coneRadius = (1.2 - i * 0.15) * scale;
+        const coneHeight = (treeHeight / 2) * (1 - i * 0.15);
+        
+        const coneGeometry = new THREE.ConeGeometry(
+            coneRadius, 
+            coneHeight, 
+            8
+        );
+        
+        // Vary the green colors slightly for more realism
+        const greenHue = 0.25 + Math.random() * 0.1; // Slight variation in green
+        const greenSaturation = 0.5 + Math.random() * 0.2;
+        const greenLightness = 0.25 + Math.random() * 0.1;
+        
+        const coneMaterial = new THREE.MeshPhongMaterial({
+            color: new THREE.Color().setHSL(greenHue, greenSaturation, greenLightness),
+            flatShading: true,
+            shininess: 3
+        });
+        
+        const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+        cone.castShadow = true;
+        cone.receiveShadow = true;
+        
+        // Position each cone layer with slight overlaps
+        const layerPosition = 3 * scale + (i * layerHeight * 0.8);
+        cone.position.y = layerPosition;
+        
+        group.add(cone);
+        
+        // Add some randomness to vertices for a less perfect shape
+        const positions = cone.geometry.attributes.position;
+        for (let j = 0; j < positions.count; j++) {
+            // Skip the top vertex of the cone
+            if (j > 0) {
+                const x = positions.getX(j);
+                const y = positions.getY(j);
+                const z = positions.getZ(j);
+                
+                // Add random displacement to x and z
+                positions.setX(j, x + (Math.random() - 0.5) * 0.1 * scale);
+                positions.setZ(j, z + (Math.random() - 0.5) * 0.1 * scale);
+            }
+        }
+        
+        cone.geometry.computeVertexNormals();
+    }
+    
+    // Add some fallen pine needles around the base
+    const needlesGeometry = new THREE.CircleGeometry(0.8 * scale, 8);
+    const needlesMaterial = new THREE.MeshPhongMaterial({
+        color: 0x3a5f0b,
+        shininess: 5,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    
+    const needles = new THREE.Mesh(needlesGeometry, needlesMaterial);
+    needles.rotation.x = -Math.PI / 2; // Lay flat on ground
+    needles.position.y = 0.01; // Just above ground
+    needles.receiveShadow = true;
+    group.add(needles);
+}
+
+// Creates a broad-leafed deciduous tree like an oak
+function createOakTree(group, scale = 1) {
+    // Create trunk with more realistic taper and bark texture
+    const trunkGeometry = new THREE.CylinderGeometry(0.25 * scale, 0.4 * scale, 2.5 * scale, 12);
+    const trunkMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x5D4037, // Darker brown for oak
+        shininess: 2,
+        flatShading: true
+    });
+    
+    // Add bark texture by modifying vertices
+    const trunkPositions = trunkGeometry.attributes.position;
+    for (let i = 0; i < trunkPositions.count; i++) {
+        const x = trunkPositions.getX(i);
+        const y = trunkPositions.getY(i);
+        const z = trunkPositions.getZ(i);
+        
+        if (Math.abs(y) < 1.2 * scale) {
+            // More pronounced bark for oak
+            const barkDepth = 0.03 * scale;
+            trunkPositions.setX(i, x + (Math.random() - 0.5) * barkDepth);
+            trunkPositions.setZ(i, z + (Math.random() - 0.5) * barkDepth);
+        }
+    }
+    
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    trunk.position.y = 1.25 * scale;
+    group.add(trunk);
+    
+    // Create main branches
+    createBranches(group, scale, trunk.position.y + trunkGeometry.parameters.height/2);
+    
+    // Create foliage as a cluster of spheres for oak's rounded canopy
+    const foliageGroup = new THREE.Group();
+    const foliageRadius = 2.2 * scale;
+    const foliageCenterY = 4.5 * scale;
+    
+    // Create multiple overlapping spheres for fuller foliage
+    const numSpheres = 15;
+    for (let i = 0; i < numSpheres; i++) {
+        // Random position within the overall foliage shape
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * foliageRadius * 0.8;
+        const height = Math.random() * foliageRadius - foliageRadius/4;
+        
+        const sphereX = Math.cos(angle) * radius;
+        const sphereY = foliageCenterY + height;
+        const sphereZ = Math.sin(angle) * radius;
+        
+        // Random size for each foliage clump
+        const sphereSize = (0.8 + Math.random() * 0.7) * scale;
+        
+        // Vary the green color for each sphere
+        const greenHue = 0.25 + Math.random() * 0.10; // Greens
+        const greenSaturation = 0.6 + Math.random() * 0.3;
+        const greenLightness = 0.25 + Math.random() * 0.15;
+        
+        const sphereGeometry = new THREE.SphereGeometry(sphereSize, 8, 8);
+        const sphereMaterial = new THREE.MeshPhongMaterial({
+            color: new THREE.Color().setHSL(greenHue, greenSaturation, greenLightness),
+            flatShading: true,
+            shininess: 5
+        });
+        
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.position.set(sphereX, sphereY, sphereZ);
+        sphere.castShadow = true;
+        
+        // Add some irregularity to the foliage spheres
+        const positions = sphere.geometry.attributes.position;
+        for (let j = 0; j < positions.count; j++) {
+            const x = positions.getX(j);
+            const y = positions.getY(j);
+            const z = positions.getZ(j);
+            
+            positions.setX(j, x + (Math.random() - 0.5) * 0.15 * scale);
+            positions.setY(j, y + (Math.random() - 0.5) * 0.15 * scale);
+            positions.setZ(j, z + (Math.random() - 0.5) * 0.15 * scale);
+        }
+        
+        sphere.geometry.computeVertexNormals();
+        foliageGroup.add(sphere);
+    }
+    
+    group.add(foliageGroup);
+    
+    // Add some ground details like roots or fallen leaves
+    const rootsGeometry = new THREE.CircleGeometry(0.8 * scale, 12);
+    const rootsMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5D4037,
+        shininess: 2,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    
+    const roots = new THREE.Mesh(rootsGeometry, rootsMaterial);
+    roots.rotation.x = -Math.PI / 2; // Lay flat on ground
+    roots.position.y = 0.01; // Just above ground
+    roots.receiveShadow = true;
+    group.add(roots);
+}
+
+// Create branches for trees
+function createBranches(group, scale, startY) {
+    // Create 3-4 main branches extending from the trunk
+    const numBranches = 3 + Math.floor(Math.random() * 2);
+    
+    for (let i = 0; i < numBranches; i++) {
+        // Angle from trunk
+        const angle = (i / numBranches) * Math.PI * 2;
+        const angleOffset = Math.random() * 0.5 - 0.25;
+        
+        // Branch parameters
+        const branchLength = (0.8 + Math.random() * 0.7) * scale;
+        const branchThickness = (0.1 + Math.random() * 0.05) * scale;
+        const branchAngle = Math.PI/4 + Math.random() * Math.PI/8; // ~45° up from horizontal
+        
+        // Create branch geometry
+        const branchGeometry = new THREE.CylinderGeometry(
+            branchThickness * 0.7, // Thinner at the end
+            branchThickness,
+            branchLength,
+            8
+        );
+        const branchMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x5D4037,
+            shininess: 2,
+            flatShading: true
+        });
+        
+        // Add bend to the branch by modifying vertices
+        const branchPositions = branchGeometry.attributes.position;
+        for (let j = 0; j < branchPositions.count; j++) {
+            const x = branchPositions.getX(j);
+            const y = branchPositions.getY(j);
+            const z = branchPositions.getZ(j);
+            
+            // Add slight bend upward toward the end of the branch
+            const bendFactor = (y / branchLength) * 0.1 * scale;
+            branchPositions.setY(j, y + bendFactor);
+            
+            // Add some random variation for more natural look
+            branchPositions.setX(j, x + (Math.random() - 0.5) * 0.02 * scale);
+            branchPositions.setZ(j, z + (Math.random() - 0.5) * 0.02 * scale);
+        }
+        
+        branchGeometry.computeVertexNormals();
+        
+        const branch = new THREE.Mesh(branchGeometry, branchMaterial);
+        branch.castShadow = true;
+        branch.receiveShadow = true;
+        
+        // Position branch
+        branch.position.y = startY - (0.3 * scale) - (Math.random() * 0.4 * scale);
+        
+        // Rotate branch to proper orientation
+        branch.rotation.z = branchAngle;
+        branch.rotation.y = angle + angleOffset;
+        
+        // Move branch outward from trunk center
+        const radialDist = 0.2 * scale;
+        branch.position.x = Math.cos(angle + angleOffset) * radialDist;
+        branch.position.z = Math.sin(angle + angleOffset) * radialDist;
+        
+        // Adjust pivot point to connect to trunk
+        branchGeometry.translate(0, -branchLength/2, 0);
+        
+        group.add(branch);
+    }
+}
+
+// Creates a tall, narrow cypress tree (common in San Francisco)
+function createCypressTree(group, scale = 1) {
+    // Create trunk with distinctive reddish-brown color
+    const trunkGeometry = new THREE.CylinderGeometry(0.18 * scale, 0.25 * scale, 2.8 * scale, 10);
+    const trunkMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x8B5A2B, 
+        shininess: 2,
+        flatShading: true
+    });
+    
+    // Add bark texture
+    const trunkPositions = trunkGeometry.attributes.position;
+    for (let i = 0; i < trunkPositions.count; i++) {
+        const x = trunkPositions.getX(i);
+        const y = trunkPositions.getY(i);
+        const z = trunkPositions.getZ(i);
+        
+        if (Math.abs(y) < 1.3 * scale) {
+            const barkDepth = 0.015 * scale;
+            trunkPositions.setX(i, x + (Math.random() - 0.5) * barkDepth);
+            trunkPositions.setZ(i, z + (Math.random() - 0.5) * barkDepth);
+        }
+    }
+    
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    trunk.position.y = 1.4 * scale;
+    group.add(trunk);
+    
+    // Create distinctive cypress shape - elongated and tapering toward top
+    const cypressHeight = 8 * scale;
+    const baseWidth = 1.5 * scale;
+    const topWidth = 0.4 * scale;
+    
+    // Build foliage from overlapping cones
+    const numCones = 6;
+    for (let i = 0; i < numCones; i++) {
+        const heightFraction = i / (numCones - 1);
+        const coneHeight = cypressHeight / (numCones - 0.5);
+        
+        // Calculate width based on height (wider at bottom, narrower at top)
+        const coneWidth = baseWidth - heightFraction * (baseWidth - topWidth);
+        
+        const coneGeometry = new THREE.ConeGeometry(coneWidth, coneHeight, 10);
+        
+        // Cypress is more gray-green
+        const greenHue = 0.26 + Math.random() * 0.05;
+        const greenSaturation = 0.4 + Math.random() * 0.15;
+        const greenLightness = 0.2 + Math.random() * 0.1;
+        
+        const coneMaterial = new THREE.MeshPhongMaterial({
+            color: new THREE.Color().setHSL(greenHue, greenSaturation, greenLightness),
+            flatShading: true,
+            shininess: 3
+        });
+        
+        const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+        cone.castShadow = true;
+        cone.receiveShadow = true;
+        
+        // Stagger the cones to create the cypress shape
+        const conePosition = 3 * scale + heightFraction * 5 * scale;
+        cone.position.y = conePosition;
+        
+        // Add some irregularity to make it look less perfect
+        const positions = cone.geometry.attributes.position;
+        for (let j = 0; j < positions.count; j++) {
+            // Don't modify the top vertex
+            if (j > 0) {
+                const x = positions.getX(j);
+                const y = positions.getY(j);
+                const z = positions.getZ(j);
+                
+                const distortion = 0.08 * scale;
+                positions.setX(j, x + (Math.random() - 0.5) * distortion);
+                positions.setZ(j, z + (Math.random() - 0.5) * distortion);
+            }
+        }
+        
+        cone.geometry.computeVertexNormals();
+        group.add(cone);
+    }
+    
+    // Add fallen needles at base
+    const needlesGeometry = new THREE.CircleGeometry(0.7 * scale, 8);
+    const needlesMaterial = new THREE.MeshPhongMaterial({
+        color: 0x556B2F,
+        shininess: 1,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide
+    });
+    
+    const needles = new THREE.Mesh(needlesGeometry, needlesMaterial);
+    needles.rotation.x = -Math.PI / 2;
+    needles.position.y = 0.01;
+    needles.receiveShadow = true;
+    group.add(needles);
+}
+
+// Creates a tall California redwood tree
+function createRedwoodTree(group, scale = 1) {
+    // Taller, larger scale for redwoods
+    const redwoodScale = scale * 1.5;
+    
+    // Create distinctive reddish trunk
+    const trunkGeometry = new THREE.CylinderGeometry(0.35 * redwoodScale, 0.5 * redwoodScale, 6 * redwoodScale, 12);
+    const trunkMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x8B2500, // Reddish-brown
+        shininess: 2,
+        flatShading: true
+    });
+    
+    // Add deep ridged bark texture
+    const trunkPositions = trunkGeometry.attributes.position;
+    for (let i = 0; i < trunkPositions.count; i++) {
+        const x = trunkPositions.getX(i);
+        const y = trunkPositions.getY(i);
+        const z = trunkPositions.getZ(i);
+        
+        if (Math.abs(y) < 2.9 * redwoodScale) {
+            // Deep ridged bark characteristic of redwoods
+            const barkDepth = 0.04 * redwoodScale;
+            const angle = Math.atan2(z, x);
+            const ridges = Math.sin(angle * 12) * barkDepth;
+            
+            const distFromCenter = Math.sqrt(x*x + z*z);
+            const normalizedX = x / distFromCenter;
+            const normalizedZ = z / distFromCenter;
+            
+            trunkPositions.setX(i, x + normalizedX * ridges);
+            trunkPositions.setZ(i, z + normalizedZ * ridges);
+        }
+    }
+    
+    trunkGeometry.computeVertexNormals();
+    
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    trunk.position.y = 3 * redwoodScale;
+    group.add(trunk);
+    
+    // Create redwood's distinctive conical shape with layered foliage
+    const foliageHeight = 12 * redwoodScale;
+    const numLayers = 7;
+    
+    for (let i = 0; i < numLayers; i++) {
+        const layerHeight = foliageHeight / numLayers;
+        const heightPosition = i / (numLayers - 1); // 0 to 1
+        
+        // Wider at bottom, narrower at top
+        const coneWidth = (1.8 - heightPosition * 0.9) * redwoodScale;
+        const coneHeight = 3 * redwoodScale * (1 - heightPosition * 0.3);
+        
+        const coneGeometry = new THREE.ConeGeometry(coneWidth, coneHeight, 10);
+        
+        // Deep green for redwoods
+        const greenHue = 0.25 + Math.random() * 0.05;
+        const greenSaturation = 0.6 + Math.random() * 0.2;
+        const greenLightness = 0.2 + Math.random() * 0.06;
+        
+        const coneMaterial = new THREE.MeshPhongMaterial({
+            color: new THREE.Color().setHSL(greenHue, greenSaturation, greenLightness),
+            flatShading: true,
+            shininess: 3
+        });
+        
+        const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+        cone.castShadow = true;
+        cone.receiveShadow = true;
+        
+        // Position each layer
+        const layerPosition = (6 * redwoodScale) + i * layerHeight * 0.9;
+        cone.position.y = layerPosition;
+        
+        // Add some randomness to vertices for a less perfect look
+        const positions = cone.geometry.attributes.position;
+        for (let j = 0; j < positions.count; j++) {
+            if (j > 0) { // Skip the top vertex
+                const x = positions.getX(j);
+                const y = positions.getY(j);
+                const z = positions.getZ(j);
+                
+                positions.setX(j, x + (Math.random() - 0.5) * 0.15 * redwoodScale);
+                positions.setZ(j, z + (Math.random() - 0.5) * 0.15 * redwoodScale);
+            }
+        }
+        
+        cone.geometry.computeVertexNormals();
+        group.add(cone);
+    }
+    
+    // Add fallen needles and small branches at base
+    const debrisGeometry = new THREE.CircleGeometry(1.0 * redwoodScale, 10);
+    const debrisMaterial = new THREE.MeshPhongMaterial({
+        color: 0x3C280D,
+        shininess: 1,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+    });
+    
+    const debris = new THREE.Mesh(debrisGeometry, debrisMaterial);
+    debris.rotation.x = -Math.PI / 2;
+    debris.position.y = 0.01;
+    debris.receiveShadow = true;
+    group.add(debris);
 }
 
 // Create the main island (hill) - now positioned at the other end of the bridge
@@ -602,20 +1114,62 @@ function addHouses() {
     });
 }
 
-// Add environment elements
+// Update the addEnvironment function to use our new trees
 function addEnvironment() {
-    // Add more trees scattered around the hill
-    const treePositions = [
-        [3, 2], [-3, -2], [4, -3],  // Original trees
-        [10, 0], [-10, 0], [5, 8], [-5, 8],
-        [8, -8], [-8, -8], [0, 10], [0, -10]
+    // Define positions for different tree types (more trees for fuller environment)
+    const treeData = [
+        // Main island trees - more varied positioning and types
+        {x: 3, z: 2, type: 'pine'}, 
+        {x: -3, z: -2, type: 'oak'}, 
+        {x: 4, z: -3, type: 'cypress'},
+        {x: 10, z: 0, type: 'redwood'}, 
+        {x: -10, z: 0, type: 'pine'}, 
+        {x: 5, z: 8, type: 'oak'},
+        {x: -5, z: 8, type: 'cypress'}, 
+        {x: 8, z: -8, type: 'redwood'}, 
+        {x: -8, z: -8, type: 'pine'},
+        {x: 0, z: 10, type: 'oak'}, 
+        {x: 0, z: -10, type: 'redwood'},
+        // Add more trees in new positions
+        {x: 12, z: 5, type: 'pine'},
+        {x: -12, z: 5, type: 'cypress'},
+        {x: 6, z: 12, type: 'oak'},
+        {x: -6, z: 12, type: 'redwood'},
+        {x: 15, z: -3, type: 'pine'},
+        {x: -15, z: -3, type: 'oak'},
+        {x: 9, z: -15, type: 'cypress'},
+        {x: -9, z: -15, type: 'redwood'},
+        {x: 3, z: 15, type: 'pine'},
+        {x: -3, z: 15, type: 'oak'}
     ];
     
-    treePositions.forEach(pos => {
-        createTree(pos[0], pos[1]);
+    // Add trees to main island
+    treeData.forEach(data => {
+        createTree(data.x, data.z, false, data.type);
     });
     
-    // Add paths connecting houses
+    // Add a small cluster of redwoods to second island
+    for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 8 + Math.random() * 6;
+        const x = -60 + Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        createTree(x, z, true, 'redwood');
+    }
+    
+    // Add different tree types to second island perimeter
+    for (let i = 0; i < 15; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 10 + Math.random() * 4;
+        const x = -60 + Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        
+        // Alternate between cypress and pine for second island
+        const type = i % 2 === 0 ? 'cypress' : 'pine';
+        createTree(x, z, true, type);
+    }
+    
+    // Create paths connecting houses (keeping your original path code)
     function createPath(startX, startZ, endX, endZ) {
         const pathLength = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endZ - startZ, 2));
         const pathGeometry = new THREE.PlaneGeometry(1, pathLength);
