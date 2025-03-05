@@ -2252,7 +2252,8 @@ function initializeCarData() {
             
             // Generate random drift direction
             const angle = Math.random() * Math.PI * 2;
-            const speed = 0.02 + Math.random() * 0.03;
+            // Much slower drift speed (10x slower than before)
+            const speed = 0.002 + Math.random() * 0.003;
             
             // Determine if this car will float or sink (alternating)
             const willFloat = index % 2 === 0;
@@ -2260,7 +2261,8 @@ function initializeCarData() {
             carDriftDirections.push({
                 x: Math.cos(angle) * speed,
                 z: Math.sin(angle) * speed,
-                rotationSpeed: (Math.random() - 0.5) * 0.01,
+                // Slower rotation as well
+                rotationSpeed: (Math.random() - 0.5) * 0.002,
                 willFloat: willFloat // Store whether this car will float or sink
             });
         });
