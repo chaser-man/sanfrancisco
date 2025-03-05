@@ -1988,6 +1988,141 @@ function addCircularWindows(tower, radius, height) {
     }
 }
 
+// Add cars to the city area
+function addCars() {
+    const carCount = 15; // Number of cars to add
+    const cars = [];
+    
+    // Create car models and place them around the city
+    for (let i = 0; i < carCount; i++) {
+        // Create a car
+        const car = createCar();
+        
+        // Position the car on the city streets
+        // City is centered around position (14.8, 2, -75) with grey base
+        // Keep cars within the flat part of the base (radius 28 instead of 30 for safe margin)
+        const radius = 15 + Math.random() * 13; // Distance from city center (max 28)
+        const angle = Math.random() * Math.PI * 2; // Random angle
+        const x = 14.8 + Math.cos(angle) * radius;
+        const z = -75 + Math.sin(angle) * radius;
+        
+        // Y position is just above the ground
+        const y = 2.3; // Slightly above the grey base at y=2
+        
+        car.position.set(x, y, z);
+        
+        // Random rotation to face different directions
+        car.rotation.y = Math.random() * Math.PI * 2;
+        
+        // Add to scene and store reference
+        scene.add(car);
+        cars.push(car);
+    }
+    
+    return cars;
+}
+
+// Create a single car model
+function createCar() {
+    const car = new THREE.Group();
+    
+    // Random car color
+    const carColors = [
+        0xff0000, // red
+        0x0000ff, // blue
+        0x00ff00, // green
+        0xffff00, // yellow
+        0x000000, // black
+        0xffffff, // white
+        0xaaaaaa, // silver
+    ];
+    const carColor = carColors[Math.floor(Math.random() * carColors.length)];
+    
+    // Car body
+    const bodyGeometry = new THREE.BoxGeometry(2, 0.5, 1);
+    const bodyMaterial = new THREE.MeshPhongMaterial({ 
+        color: carColor,
+        shininess: 80
+    });
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.y = 0.5;
+    car.add(body);
+    
+    // Car cabin
+    const cabinGeometry = new THREE.BoxGeometry(1, 0.4, 0.9);
+    const cabinMaterial = new THREE.MeshPhongMaterial({
+        color: 0x333333,
+        shininess: 90,
+        transparent: true,
+        opacity: 0.7
+    });
+    const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+    cabin.position.set(-0.1, 0.9, 0);
+    car.add(cabin);
+    
+    // Wheels
+    const wheelGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
+    const wheelMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x333333, 
+        shininess: 30 
+    });
+    
+    // Front left wheel
+    const wheelFL = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheelFL.rotation.x = Math.PI / 2;
+    wheelFL.position.set(0.6, 0.2, 0.5);
+    car.add(wheelFL);
+    
+    // Front right wheel
+    const wheelFR = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheelFR.rotation.x = Math.PI / 2;
+    wheelFR.position.set(0.6, 0.2, -0.5);
+    car.add(wheelFR);
+    
+    // Rear left wheel
+    const wheelRL = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheelRL.rotation.x = Math.PI / 2;
+    wheelRL.position.set(-0.6, 0.2, 0.5);
+    car.add(wheelRL);
+    
+    // Rear right wheel
+    const wheelRR = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheelRR.rotation.x = Math.PI / 2;
+    wheelRR.position.set(-0.6, 0.2, -0.5);
+    car.add(wheelRR);
+    
+    // Headlights
+    const headlightGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+    const headlightMaterial = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        emissive: 0xffffcc,
+        shininess: 100
+    });
+    
+    // Left headlight
+    const headlightL = new THREE.Mesh(headlightGeometry, headlightMaterial);
+    headlightL.position.set(1.05, 0.5, 0.3);
+    car.add(headlightL);
+    
+    // Right headlight
+    const headlightR = new THREE.Mesh(headlightGeometry, headlightMaterial);
+    headlightR.position.set(1.05, 0.5, -0.3);
+    car.add(headlightR);
+    
+    // Add shadows
+    car.traverse(object => {
+        if (object instanceof THREE.Mesh) {
+            object.castShadow = true;
+            object.receiveShadow = true;
+        }
+    });
+    
+    // Scale car down to match scene scale
+    car.scale.set(0.8, 0.8, 0.8);
+    
+    return car;
+}
+
 // Create all scene elements in the correct order
 const skybox = createSkybox();
 const greyBase = createGreyBase();
@@ -1999,6 +2134,7 @@ const slope = createSlopingTerrain();
 const ocean = createOcean();
 const boats = addBoats();
 const seagulls = addSeagulls();
+const cars = addCars(); // Add cars to the city
 addFog();
 
 // Call these functions to add houses and environment
@@ -2025,6 +2161,11 @@ const normalSeaLevel = -3.5; // Store the original sea level
 const floodedSeaLevel = 5; // Increased from 3 to 5 for higher flooding
 let animationInProgress = false;
 let rainSystem = null; // Store reference to rain particles
+let carsFloating = false; // Track if cars are in floating mode
+
+// Store original car positions for restoration when water recedes
+const carOriginalPositions = [];
+const carDriftDirections = [];
 
 // Initialize switch state
 switchStateEl.classList.add('normal-state');
@@ -2097,6 +2238,38 @@ function animateRain() {
     positions.needsUpdate = true;
 }
 
+// Store original car positions and generate random drift directions
+function initializeCarData() {
+    if (cars && carOriginalPositions.length === 0) {
+        cars.forEach((car, index) => {
+            // Store original position
+            carOriginalPositions.push({
+                x: car.position.x,
+                y: car.position.y,
+                z: car.position.z,
+                rotation: car.rotation.y
+            });
+            
+            // Generate random drift direction
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.02 + Math.random() * 0.03;
+            
+            // Determine if this car will float or sink (alternating)
+            const willFloat = index % 2 === 0;
+            
+            carDriftDirections.push({
+                x: Math.cos(angle) * speed,
+                z: Math.sin(angle) * speed,
+                rotationSpeed: (Math.random() - 0.5) * 0.01,
+                willFloat: willFloat // Store whether this car will float or sink
+            });
+        });
+    }
+}
+
+// Call once to initialize
+initializeCarData();
+
 sceneToggle.addEventListener('change', function() {
     if (this.checked) {
         // Rising sea level
@@ -2113,6 +2286,9 @@ sceneToggle.addEventListener('change', function() {
             rainSystem = createRain();
             scene.add(rainSystem);
         }
+        
+        // Enable car floating
+        carsFloating = true;
     } else {
         // Lowering sea level
         targetSeaLevel = normalSeaLevel;
@@ -2130,6 +2306,9 @@ sceneToggle.addEventListener('change', function() {
             rainSystem.material.dispose();
             rainSystem = null;
         }
+        
+        // Disable car floating - cars will return to original positions
+        carsFloating = false;
     }
     
     if (!animationInProgress) {
@@ -2226,6 +2405,120 @@ function animate() {
             // Gentle rotation
             boat.rotation.z = Math.sin(time * 0.5 + index * 0.3) * 0.05;
             boat.rotation.x = Math.sin(time * 0.7 + index * 0.1) * 0.03;
+        });
+    }
+    
+    // Animate cars
+    if (cars) {
+        cars.forEach((car, index) => {
+            if (carsFloating) {
+                // Cars float on water when it's high enough
+                if (ocean.surface.position.y > 2.5) { // Only float when water is above the base
+                    cars.forEach((car, index) => {
+                        // Get whether this car will float or sink
+                        const willFloat = carDriftDirections[index].willFloat;
+                        
+                        // Make cars float at water level (slightly above to show they're floating)
+                        const floatHeight = ocean.surface.position.y + 0.2;
+                        const sinkHeight = ocean.surface.position.y - 0.8; // Underwater
+                        
+                        if (willFloat) {
+                            // FLOATING CARS - same as before
+                            // Gradually lift cars to floating height if they're not there yet
+                            if (car.position.y < floatHeight) {
+                                car.position.y = Math.min(car.position.y + 0.05, floatHeight);
+                            } else {
+                                // Bobbing motion once they're floating
+                                const time = Date.now() * 0.001;
+                                car.position.y = floatHeight + Math.sin(time * 0.8 + index * 0.2) * 0.1;
+                                
+                                // Apply drift in random direction
+                                car.position.x += carDriftDirections[index].x;
+                                car.position.z += carDriftDirections[index].z;
+                                
+                                // Add slight rotation to simulate water movement
+                                car.rotation.y += carDriftDirections[index].rotationSpeed;
+                                
+                                // Add slight tilt
+                                car.rotation.z = Math.sin(time * 0.5 + index * 0.3) * 0.05;
+                                car.rotation.x = Math.sin(time * 0.7 + index * 0.1) * 0.05;
+                            }
+                        } else {
+                            // SINKING CARS - gradually sink below water level and stay there
+                            if (car.position.y > sinkHeight) {
+                                // Sink gradually
+                                car.position.y = Math.max(car.position.y - 0.03, sinkHeight);
+                                
+                                // Tilt as it sinks
+                                car.rotation.z += 0.01 * (index % 2 === 0 ? 1 : -1);
+                                car.rotation.x += 0.005 * (index % 3 === 0 ? 1 : -1);
+                            } else {
+                                // Once at sink height, stay there with minimal movement
+                                const time = Date.now() * 0.0005;
+                                
+                                // Very slight bobbing, almost stationary
+                                car.position.y = sinkHeight + Math.sin(time * 0.2 + index) * 0.01;
+                                
+                                // No horizontal movement - car is "drowned"
+                            }
+                        }
+                    });
+                } else {
+                    // Water not high enough yet, normal circular movement
+                    // ... existing code for normal movement ...
+                }
+            } else {
+                // Water is receding - return cars to their normal behavior
+                if (ocean.surface.position.y < 3) {
+                    // Return to original positions if water is low enough
+                    const original = carOriginalPositions[index];
+                    
+                    // If we're still floating, gently move back towards original path
+                    if (car.position.y > original.y + 0.1) {
+                        const time = Date.now() * 0.0005;
+                        const radius = 15 + (index % 7) * 1.8;
+                        const carAngle = time * (0.2 + (index % 3) * 0.1) + index;
+                        
+                        // Target position on the circular path
+                        const targetX = 14.8 + Math.cos(carAngle) * radius;
+                        const targetZ = -75 + Math.sin(carAngle) * radius;
+                        
+                        // Move gradually back to path
+                        car.position.x += (targetX - car.position.x) * 0.02;
+                        car.position.z += (targetZ - car.position.z) * 0.02;
+                        car.position.y -= 0.05; // Move down gradually
+                        
+                        // Gradually straighten rotation
+                        car.rotation.x *= 0.9;
+                        car.rotation.z *= 0.9;
+                        
+                        // Point in the direction of movement
+                        const nextAngle = carAngle + 0.01;
+                        const nextX = 14.8 + Math.cos(nextAngle) * radius;
+                        const nextZ = -75 + Math.sin(nextAngle) * radius;
+                        
+                        car.lookAt(nextX, car.position.y, nextZ);
+                        car.rotateY(Math.PI / 2);
+                    } else {
+                        // Back to normal circular movement
+                        const time = Date.now() * 0.0005;
+                        const radius = 15 + (index % 7) * 1.8;
+                        const speed = 0.2 + (index % 3) * 0.1;
+                        const carAngle = time * speed + index;
+                        
+                        car.position.x = 14.8 + Math.cos(carAngle) * radius;
+                        car.position.z = -75 + Math.sin(carAngle) * radius;
+                        car.position.y = original.y;
+                        
+                        const nextAngle = carAngle + 0.01;
+                        const nextX = 14.8 + Math.cos(nextAngle) * radius;
+                        const nextZ = -75 + Math.sin(nextAngle) * radius;
+                        
+                        car.lookAt(nextX, car.position.y, nextZ);
+                        car.rotateY(Math.PI / 2);
+                    }
+                }
+            }
         });
     }
     
