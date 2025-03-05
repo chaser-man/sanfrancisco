@@ -203,37 +203,34 @@ function createHouse() {
 
 // Create an enhanced tree with more realistic features
 function createTree(posX, posZ, isSecondIsland = false, treeType = 'random') {
-    // Create tree group to hold all components
-    const treeGroup = new THREE.Group();
-    
-    // Calculate Y position based on the hill's surface (keeping your original logic)
-    let hillRadius, baseY, centerX = 0;
-    
+    // Skip tree creation entirely if it's meant for the second island (city)
     if (isSecondIsland) {
-        hillRadius = 15;
-        baseY = 21.5;
-        centerX = -60;
-    } else {
-        hillRadius = 15; 
-        baseY = 21.5;
-        centerX = 0;
+        return null; // Don't create trees on the city island
     }
+    
+    // Define island parameters
+    let hillRadius = 15; // Still used for boundary checking
+    let islandSurfaceY = 10.25; // Match with new island surface level
+    let centerX = 8; // New island center X position (moved right)
     
     const adjustedX = posX - centerX;
     const distFromIslandCenter = Math.sqrt(adjustedX * adjustedX + posZ * posZ);
     
-    // Only calculate height if within island radius
-    let yPosition = 0;
-    if (distFromIslandCenter < hillRadius) {
-        const heightOffset = hillRadius - Math.sqrt(hillRadius * hillRadius - distFromIslandCenter * distFromIslandCenter);
-        yPosition = baseY - heightOffset;
-    } else {
-        // If outside radius, place at water level
-        yPosition = -3;
+    // Skip tree creation if the position is outside the island radius (in water)
+    if (distFromIslandCenter >= hillRadius) {
+        return null; // Don't create trees in the water
     }
+    
+    // Use constant Y position for flat ground
+    let yPosition = islandSurfaceY;
+    
+    // Create tree group to hold all components
+    const treeGroup = new THREE.Group();
     
     // Randomly select tree type if not specified
     if (treeType === 'random') {
+        island.position.y = 10; // Align with bridge road level
+
         const types = ['pine', 'oak', 'cypress', 'redwood'];
         treeType = types[Math.floor(Math.random() * types.length)];
     }
@@ -259,8 +256,8 @@ function createTree(posX, posZ, isSecondIsland = false, treeType = 'random') {
             createPineTree(treeGroup, sizeVariation);
     }
     
-    // Position the entire tree group
-    treeGroup.position.set(posX, yPosition, posZ);
+    // Position the entire tree group (adjust X by island offset)
+    treeGroup.position.set(posX + centerX, yPosition, posZ);
     
     // Add random rotation for variety
     treeGroup.rotation.y = Math.random() * Math.PI * 2;
@@ -382,7 +379,7 @@ function createOakTree(group, scale = 1) {
     const trunkMaterial = new THREE.MeshPhongMaterial({ 
         color: 0x5D4037, // Darker brown for oak
         shininess: 2,
-        flatShading: true
+        flatShading: true 
     });
     
     // Add bark texture by modifying vertices
@@ -760,28 +757,56 @@ function createRedwoodTree(group, scale = 1) {
     group.add(debris);
 }
 
-// Create the main island (hill) - now positioned at the other end of the bridge
+// Create main island as a flat cylinder that connects with the bridge road
 function createMainIsland() {
-    const hillGeometry = new THREE.SphereGeometry(
-        25,  // radius - increased to accommodate more houses
-        32,  // widthSegments
-        32,  // heightSegments
-        0,   // phiStart
-        Math.PI * 2,  // phiLength
-        0,    // thetaStart - start from top pole
-        Math.PI/4     // thetaLength - reduced to quarter sphere (45 degrees)
-    );
-    const hillMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0x90EE90,
-        side: THREE.DoubleSide
+    // Use a cylinder with minimal height for a flat island
+    const islandGeometry = new THREE.CylinderGeometry(15, 15, 0.5, 32);
+    const islandMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x91BD59, // Grass green color
+        shininess: 0
     });
-    const hill = new THREE.Mesh(hillGeometry, hillMaterial);
-    hill.position.y = -3.5; // Keep the hill position the same
-    hill.position.x = 0; // Position at the right end of the bridge
-    hill.receiveShadow = true;
-    scene.add(hill);
     
-    return hill;
+    const island = new THREE.Mesh(islandGeometry, islandMaterial);
+    
+    // Position at the bridge road level and move to the right
+    island.position.y = 10; // Align with bridge road level
+    island.position.x = 14.8; // Move island to the right
+    
+    // Add some texture to the island surface
+    const textureDetail = 100;
+    for (let i = 0; i < textureDetail; i++) {
+        // Create small bumps of varying shades of green
+        const bumpGeometry = new THREE.CylinderGeometry(
+            0.2 + Math.random() * 0.3,  // Random radius
+            0.1 + Math.random() * 0.2,
+            0.1,
+            8
+        );
+        
+        // Vary the green color slightly
+        const greenValue = 0.4 + Math.random() * 0.2;
+        const bumpMaterial = new THREE.MeshPhongMaterial({ 
+            color: new THREE.Color(0.2, greenValue, 0.1),
+            shininess: 0
+        });
+        
+        const bump = new THREE.Mesh(bumpGeometry, bumpMaterial);
+        
+        // Position randomly within island bounds
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * 14; // Keep within island radius
+        
+        bump.position.x = Math.cos(angle) * radius;
+        bump.position.z = Math.sin(angle) * radius;
+        bump.position.y = 0.3; // Small elevation above island surface
+        
+        island.add(bump);
+    }
+    
+    island.receiveShadow = true;
+    scene.add(island);
+    
+    return island;
 }
 
 // Create a San Francisco skyline on the second island
@@ -938,140 +963,12 @@ function createOcean() {
     scene.add(ocean);
     scene.add(deepOcean);
     
-    // Add subtle foam around islands
-    function createFoam(centerX, centerZ, radius) {
-        const foamGeometry = new THREE.RingGeometry(radius - 0.5, radius + 0.5, 64);
-        const foamMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.4,
-            side: THREE.DoubleSide
-        });
-        
-        const foam = new THREE.Mesh(foamGeometry, foamMaterial);
-        foam.rotation.x = -Math.PI / 2;
-        foam.position.set(centerX, -3.4, centerZ);
-        scene.add(foam);
-        
-        return foam;
-    }
-    
-    // Create foam rings around both islands
-    const mainIslandFoam = createFoam(0, 0, 25);
-    const secondIslandFoam = createFoam(-60, 0, 15);
-    
+    // Return ocean structure without foam rings
     return {
         surface: ocean,
         deep: deepOcean,
-        foams: [mainIslandFoam, secondIslandFoam]
+        foams: [] // Empty array instead of creating foam rings
     };
-}
-
-// Create Golden Gate Bridge with more detail - now connecting the two islands properly
-function createBridge() {
-    const bridgeGroup = new THREE.Group();
-    
-    // Bridge deck
-    const deckGeometry = new THREE.BoxGeometry(60, 0.5, 6);
-    const deckMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-    const deck = new THREE.Mesh(deckGeometry, deckMaterial);
-    deck.position.set(-30, 10, 0); // Position between islands
-    deck.castShadow = true;
-    bridgeGroup.add(deck);
-    
-    // Road on the bridge
-    const roadGeometry = new THREE.BoxGeometry(60, 0.1, 4);
-    const roadMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
-    const road = new THREE.Mesh(roadGeometry, roadMaterial);
-    road.position.set(-30, 10.3, 0);
-    bridgeGroup.add(road);
-    
-    // Road markings
-    const markingsGeometry = new THREE.PlaneGeometry(0.5, 2);
-    const markingsMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-    
-    for (let i = -55; i <= -5; i += 5) {
-        const marking = new THREE.Mesh(markingsGeometry, markingsMaterial);
-        marking.rotation.x = -Math.PI / 2;
-        marking.position.set(i, 10.31, 0);
-        bridgeGroup.add(marking);
-    }
-    
-    // Bridge towers
-    function createTower(x) {
-        const towerGroup = new THREE.Group();
-        
-        // Tower base
-        const baseGeometry = new THREE.BoxGeometry(4, 20, 4);
-        const baseMaterial = new THREE.MeshPhongMaterial({ color: 0xb22222 }); // Golden Gate red
-        const base = new THREE.Mesh(baseGeometry, baseMaterial);
-        base.position.y = 10;
-        base.castShadow = true;
-        towerGroup.add(base);
-        
-        // Tower top
-        const topGeometry = new THREE.BoxGeometry(3, 5, 3);
-        const top = new THREE.Mesh(topGeometry, baseMaterial);
-        top.position.y = 22.5;
-        top.castShadow = true;
-        towerGroup.add(top);
-        
-        // Tower details
-        const detailGeometry = new THREE.BoxGeometry(4.5, 0.5, 4.5);
-        const detail1 = new THREE.Mesh(detailGeometry, baseMaterial);
-        detail1.position.y = 20;
-        towerGroup.add(detail1);
-        
-        const detail2 = new THREE.Mesh(detailGeometry, baseMaterial);
-        detail2.position.y = 5;
-        towerGroup.add(detail2);
-        
-        towerGroup.position.set(x, 0, 0);
-        return towerGroup;
-    }
-    
-    // Add two towers
-    bridgeGroup.add(createTower(-10));
-    bridgeGroup.add(createTower(-50));
-    
-    // Bridge cables
-    const cableGeometry = new THREE.CylinderGeometry(0.2, 0.2, 60, 8);
-    const cableMaterial = new THREE.MeshPhongMaterial({ color: 0x111111 });
-    
-    // Main cables (2 on each side)
-    for (let z = -2.5; z <= 2.5; z += 5) {
-        const cable = new THREE.Mesh(cableGeometry, cableMaterial);
-        cable.rotation.z = Math.PI / 2; // Rotate to horizontal
-        cable.position.set(-30, 20, z);
-        bridgeGroup.add(cable);
-    }
-    
-    // Suspension cables
-    for (let x = -55; x <= -5; x += 2.5) {
-        for (let z = -2.5; z <= 2.5; z += 5) {
-            const height = 20 - 5 * Math.cos((x + 30) * Math.PI / 50);
-            const suspensionGeometry = new THREE.CylinderGeometry(0.05, 0.05, height - 10, 8);
-            const suspension = new THREE.Mesh(suspensionGeometry, cableMaterial);
-            suspension.position.set(x, 10 + (height - 10) / 2, z);
-            bridgeGroup.add(suspension);
-        }
-    }
-    
-    // Cross beams
-    for (let x = -55; x <= -5; x += 5) {
-        const beamGeometry = new THREE.BoxGeometry(0.5, 0.5, 6);
-        const beam = new THREE.Mesh(beamGeometry, cableMaterial);
-        beam.position.set(x, 9.5, 0);
-        bridgeGroup.add(beam);
-    }
-    
-    scene.add(bridgeGroup);
-    return bridgeGroup;
-}
-
-// Create fog for San Francisco feel
-function addFog() {
-    scene.fog = new THREE.FogExp2(0xcccccc, 0.0015);
 }
 
 // Add houses to scene in a San Francisco style layout
@@ -1083,23 +980,21 @@ function addHouses() {
         [-8, 5],      // House 3
         [5, -8],      // House 4
         [-5, -8],     // House 5
-        [8, -3],      // House 6 - adjusted position
-        [-8, -3],     // House 7 - adjusted position
-        [0, -8]       // House 8 - adjusted position
+        [8, -3],      // House 6
+        [-8, -3],     // House 7
+        [0, -8]       // House 8
     ];
+    
+    // Island parameters
+    const islandSurfaceY = 10.25; // Slightly above island surface
+    const islandCenterX = 15; // Island center X position
     
     // Create houses at each position with slight variations
     housePositions.forEach((pos, index) => {
         const house = createHouse();
         
-        // Calculate Y position based on the hill's surface
-        // For a sphere with radius r, the height at distance d from center is r - sqrt(r^2 - d^2)
-        const distanceFromCenter = Math.sqrt(pos[0] * pos[0] + pos[1] * pos[1]);
-        const hillRadius = 25; // Changed to match island size
-        const heightOffset = hillRadius - Math.sqrt(hillRadius * hillRadius - distanceFromCenter * distanceFromCenter);
-        const yPosition = 21.5 - heightOffset; // Base Y position adjusted for hill height
-        
-        house.position.set(pos[0], yPosition, pos[1]);
+        // Place all houses on the flat surface, adjusted for island position
+        house.position.set(pos[0] + islandCenterX, islandSurfaceY, pos[1]);
         
         // Rotate houses to face different directions
         house.rotation.y = Math.random() * Math.PI * 2;
@@ -1114,7 +1009,7 @@ function addHouses() {
     });
 }
 
-// Update the addEnvironment function to use our new trees
+// Update the addEnvironment function for paths
 function addEnvironment() {
     // Define positions for different tree types (more trees for fuller environment)
     const treeData = [
@@ -1148,28 +1043,7 @@ function addEnvironment() {
         createTree(data.x, data.z, false, data.type);
     });
     
-    // Add a small cluster of redwoods to second island
-    for (let i = 0; i < 8; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 8 + Math.random() * 6;
-        const x = -60 + Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-        createTree(x, z, true, 'redwood');
-    }
-    
-    // Add different tree types to second island perimeter
-    for (let i = 0; i < 15; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 10 + Math.random() * 4;
-        const x = -60 + Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-        
-        // Alternate between cypress and pine for second island
-        const type = i % 2 === 0 ? 'cypress' : 'pine';
-        createTree(x, z, true, type);
-    }
-    
-    // Create paths connecting houses (keeping your original path code)
+    // Create paths connecting houses 
     function createPath(startX, startZ, endX, endZ) {
         const pathLength = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endZ - startZ, 2));
         const pathGeometry = new THREE.PlaneGeometry(1, pathLength);
@@ -1183,13 +1057,11 @@ function addEnvironment() {
         const midX = (startX + endX) / 2;
         const midZ = (startZ + endZ) / 2;
         
-        // Calculate Y position based on the hill's surface
-        const distanceFromCenter = Math.sqrt(midX * midX + midZ * midZ);
-        const hillRadius = 25; // Changed to match island size
-        const heightOffset = hillRadius - Math.sqrt(hillRadius * hillRadius - distanceFromCenter * distanceFromCenter);
-        const yPosition = 21.51 - heightOffset; // Slightly above the hill surface
+        // Use constant Y position for flat ground (slightly above the surface)
+        const yPosition = 10.26; // Just slightly above the flat island surface
+        const islandCenterX = 20; // Island center X position
         
-        path.position.set(midX, yPosition, midZ);
+        path.position.set(midX + islandCenterX, yPosition, midZ);
         
         // Rotate to connect the points
         const angle = Math.atan2(endZ - startZ, endX - startX);
@@ -1210,82 +1082,61 @@ function addEnvironment() {
     createPath(-5, -8, 0, -8);
 }
 
-// Add boats to the ocean
+// Add boats to the ocean, but remove any cars
 function addBoats() {
-    function createBoat(x, z, size = 1, type = 'regular') {
-        const boatGroup = new THREE.Group();
-        
-        let hullColor, cabinColor;
-        
-        if (type === 'ferry') {
-            hullColor = 0x1e3f66;
-            cabinColor = 0xffffff;
-        } else if (type === 'sailboat') {
-            hullColor = 0xffffff;
-            cabinColor = 0x8B4513;
-        } else {
-            hullColor = 0xffffff;
-            cabinColor = 0x1e3f66;
-        }
-        
-        // Boat hull
-        const hullGeometry = new THREE.BoxGeometry(4 * size, 1 * size, 2 * size);
-        const hullMaterial = new THREE.MeshPhongMaterial({ color: hullColor });
-        const hull = new THREE.Mesh(hullGeometry, hullMaterial);
-        hull.position.y = -2.5; // Just above water level
-        hull.castShadow = true;
-        boatGroup.add(hull);
-        
-        // Boat cabin
-        const cabinGeometry = new THREE.BoxGeometry(2 * size, 1 * size, 1.5 * size);
-        const cabinMaterial = new THREE.MeshPhongMaterial({ color: cabinColor });
-        const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
-        cabin.position.y = -1.5;
-        cabin.castShadow = true;
-        boatGroup.add(cabin);
-        
-        // Add sail for sailboats
-        if (type === 'sailboat') {
-            const mastGeometry = new THREE.CylinderGeometry(0.1, 0.1, 5, 8);
-            const mastMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-            const mast = new THREE.Mesh(mastGeometry, mastMaterial);
-            mast.position.y = 0;
-            boatGroup.add(mast);
-            
-            const sailGeometry = new THREE.PlaneGeometry(3, 4);
-            const sailMaterial = new THREE.MeshPhongMaterial({ 
-                color: 0xFFFFFF, 
-                side: THREE.DoubleSide 
-            });
-            const sail = new THREE.Mesh(sailGeometry, sailMaterial);
-            sail.rotation.y = Math.PI / 2;
-            sail.position.set(0, 0, 0);
-            boatGroup.add(sail);
-        }
-        
-        boatGroup.position.set(x, 0, z);
-        scene.add(boatGroup);
-        
-        return boatGroup;
-    }
+    const boats = [];
     
-    // Add several boats of different types
-    const boats = [
-        createBoat(-20, 15, 1, 'regular'),
-        createBoat(-40, -10, 1.5, 'ferry'),
-        createBoat(15, -25, 0.8, 'sailboat'),
-        createBoat(25, 20, 0.7, 'sailboat'),
-        createBoat(-15, -20, 1.2, 'ferry'),
-        createBoat(5, 30, 0.9, 'regular'),
-        createBoat(-30, 25, 0.8, 'sailboat'),
-        // Add more boats for a busier bay
-        createBoat(-5, -35, 1.1, 'ferry'),
-        createBoat(35, -5, 0.6, 'sailboat'),
-        createBoat(-45, 30, 0.9, 'sailboat'),
-        createBoat(10, 40, 1.3, 'ferry')
+    // Define sailboat positions - revised to avoid intersection with residential island
+    const boatPositions = [
+        { x: -20, z: 20 },
+        { x: -40, z: -15 },
+        { x: 20, z: -35 },  // Moved further away from residential island (was x:20, z:-25)
+        { x: 50, z: 15 }
     ];
     
+    // Create only sailboats
+    boatPositions.forEach(pos => {
+        const boat = createSailboat();
+        boat.position.set(pos.x, -3, pos.z);
+        scene.add(boat);
+        boats.push(boat);
+    });
+    
     return boats;
+}
+
+// Helper function to create a sailboat
+function createSailboat() {
+    const boatGroup = new THREE.Group();
+    
+    // Boat hull
+    const hullGeometry = new THREE.BoxGeometry(4, 1, 1.5);
+    const hullMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+    hull.position.y = 0.5;
+    boatGroup.add(hull);
+    
+    // Boat sail
+    const sailGeometry = new THREE.PlaneGeometry(2, 3);
+    const sailMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0xFFFFFF,
+        side: THREE.DoubleSide
+    });
+    const sail = new THREE.Mesh(sailGeometry, sailMaterial);
+    sail.rotation.y = Math.PI / 2;
+    sail.position.set(0, 2.5, 0);
+    boatGroup.add(sail);
+    
+    // Boat mast
+    const mastGeometry = new THREE.CylinderGeometry(0.05, 0.05, 4);
+    const mastMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+    const mast = new THREE.Mesh(mastGeometry, mastMaterial);
+    mast.position.set(0, 2, 0);
+    boatGroup.add(mast);
+    
+    boatGroup.castShadow = true;
+    
+    return boatGroup;
 }
 
 // Add seagulls flying around
@@ -1346,13 +1197,144 @@ function addSeagulls() {
     return seagulls;
 }
 
+// Add sloping terrain between the residential island and ocean
+function createSlopingTerrain() {
+    // Create a truncated cone (frustum) for the sloping sides
+    // Top radius matches the residential island, bottom is wider
+    const slopeGeometry = new THREE.CylinderGeometry(
+        15,     // Top radius - match the residential island
+        30,     // Bottom radius - wider base in the water
+        13,     // Height - from below water to the island surface
+        32,     // Radial segments for smoother appearance
+        8,      // Height segments to allow vertex manipulation
+        false   // Open-ended false (we want closed ends)
+    );
+    
+    // Terrain material - slightly darker than the top to suggest shadow
+    const slopeMaterial = new THREE.MeshPhongMaterial({
+        color: 0x75A743,  // Slightly darker green than the top
+        shininess: 5,
+        flatShading: true  // Add some texture to the terrain
+    });
+    
+    const slope = new THREE.Mesh(slopeGeometry, slopeMaterial);
+    
+    // Position the slope's top at the same level as the island bottom
+    // and at the same X,Z coordinates
+    slope.position.set(14.8, -3 + 13/2, 0);  // X matches island, Y centers the geometry vertically
+    
+    // Add some random variation to the slope vertices for a more natural appearance
+    const positions = slope.geometry.attributes.position;
+    
+    for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const y = positions.getY(i);
+        const z = positions.getZ(i);
+        
+        // Don't modify vertices at the very top (keep it flat to match the island)
+        // and less modification near the top than bottom
+        if (y < 6) {
+            const distFromTop = 6 - y;  // 0 at y=6, increasing as we go down
+            const randomNoise = (Math.random() - 0.5) * 0.1 * distFromTop;
+            
+            // More distortion as we get further from center
+            const distFromCenter = Math.sqrt(x * x + z * z);
+            const edgeNoise = (Math.random() - 0.5) * 0.15 * distFromCenter / 15;
+            
+            positions.setX(i, x + randomNoise + edgeNoise);
+            positions.setZ(i, z + randomNoise + edgeNoise);
+            
+            // Add some vertical variation too, but less of it
+            positions.setY(i, y + (Math.random() - 0.5) * 0.05 * distFromTop);
+        }
+    }
+    
+    // Add some vegetation and rock details to the slope
+    addSlopeDetails(slope);
+    
+    slope.geometry.computeVertexNormals();
+    slope.castShadow = true;
+    slope.receiveShadow = true;
+    slope.renderOrder = -1; // Render before other objects
+    
+    scene.add(slope);
+    
+    return slope;
+}
+
+// Add visual details to the slope for more realism
+function addSlopeDetails(slope) {
+    // Add some rock outcroppings
+    for (let i = 0; i < 25; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const heightPercent = Math.random(); // 0 = bottom, 1 = top
+        const radiusPercent = 0.6 + Math.random() * 0.4; // Keep rocks on the slope
+        
+        // Calculate position on the slope
+        const radius = 15 + (30 - 15) * (1 - heightPercent) * radiusPercent;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const y = -3 + heightPercent * 13; // Map from water level to just below island
+        
+        // Create a rock
+        const rockSize = 0.5 + Math.random() * 1.5;
+        const rockGeometry = new THREE.DodecahedronGeometry(rockSize, 0);
+        const rockMaterial = new THREE.MeshPhongMaterial({
+            color: new THREE.Color(0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2),
+            flatShading: true
+        });
+        
+        const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+        rock.position.set(14.8 + x, y, z);
+        rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        
+        scene.add(rock);
+    }
+    
+    // Add some small vegetation patches
+    for (let i = 0; i < 40; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const heightPercent = 0.3 + Math.random() * 0.7; // Keep vegetation on upper 70% of slope
+        const radiusPercent = 0.7 + Math.random() * 0.3; // Keep vegetation on the slope
+        
+        // Calculate position on the slope
+        const radius = 15 + (30 - 15) * (1 - heightPercent) * radiusPercent;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const y = -3 + heightPercent * 13; // Map from water level to just below island
+        
+        // Create vegetation patch
+        const vegSize = 0.8 + Math.random() * 1.2;
+        const vegGeometry = new THREE.SphereGeometry(vegSize, 4, 4);
+        const vegMaterial = new THREE.MeshPhongMaterial({
+            color: new THREE.Color(0.1, 0.3 + Math.random() * 0.3, 0.1),
+            flatShading: true
+        });
+        
+        const veg = new THREE.Mesh(vegGeometry, vegMaterial);
+        veg.position.set(14.8 + x, y + vegSize * 0.3, z);
+        veg.scale.y = 0.5; // Flatten it a bit
+        veg.castShadow = true;
+        veg.receiveShadow = true;
+        
+        scene.add(veg);
+    }
+}
+
+// Create fog for San Francisco feel
+function addFog() {
+    scene.fog = new THREE.FogExp2(0xcccccc, 0.0015);
+}
+
 // Create all scene elements in the correct order
 const skybox = createSkybox();
 const mainIsland = createMainIsland();
+const slope = createSlopingTerrain();
 const secondIsland = createSecondIsland();
 const sfSkyline = createSFSkyline();
 const ocean = createOcean();
-const bridge = createBridge();
 const boats = addBoats();
 const seagulls = addSeagulls();
 addFog();
@@ -1379,7 +1361,6 @@ function animate() {
     // Animate ocean waves with more realistic pattern
     if (ocean && ocean.surface && ocean.surface.geometry && 
         ocean.surface.geometry.attributes && ocean.surface.geometry.attributes.position) {
-        
         const vertices = ocean.surface.geometry.attributes.position;
         const time = Date.now() * 0.001;
         
@@ -1405,15 +1386,6 @@ function animate() {
         
         vertices.needsUpdate = true;
         ocean.surface.geometry.computeVertexNormals();
-        
-        // Animate foam rings
-        if (ocean.foams) {
-            ocean.foams.forEach((foam, index) => {
-                const foamScale = 1 + Math.sin(time * 0.5 + index) * 0.03;
-                foam.scale.set(foamScale, 1, foamScale);
-                foam.position.y = -3.4 + Math.sin(time * 0.7 + index * 2) * 0.1;
-            });
-        }
     }
     
     // Animate boats
@@ -1421,7 +1393,7 @@ function animate() {
         boats.forEach((boat, index) => {
             const time = Date.now() * 0.001;
             // Gentle bobbing motion
-            boat.position.y = Math.sin(time * 0.8 + index * 0.2) * 0.2;
+            boat.position.y = -3 + Math.sin(time * 0.8 + index * 0.2) * 0.2;
             // Gentle rotation
             boat.rotation.z = Math.sin(time * 0.5 + index * 0.3) * 0.05;
             boat.rotation.x = Math.sin(time * 0.7 + index * 0.1) * 0.03;
