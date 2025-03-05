@@ -2016,9 +2016,176 @@ scene.add(warmLight);
 // Adjust camera position for a better view of both islands and the bridge
 camera.position.set(50, houseCenterY + 30, 50);
 
+// Add toggle switch functionality for sea level rise
+const sceneToggle = document.getElementById('sceneToggle');
+const switchStateEl = document.getElementById('switchState');
+let isRising = false;
+let targetSeaLevel = -3.5; // Default sea level
+const normalSeaLevel = -3.5; // Store the original sea level
+const floodedSeaLevel = 5; // Increased from 3 to 5 for higher flooding
+let animationInProgress = false;
+let rainSystem = null; // Store reference to rain particles
+
+// Initialize switch state
+switchStateEl.classList.add('normal-state');
+switchStateEl.textContent = 'Normal';
+
+// Create the rain system
+function createRain() {
+    // Create geometry for raindrops
+    const rainCount = 15000;
+    const rainGeometry = new THREE.BufferGeometry();
+    const rainPositions = new Float32Array(rainCount * 3); // 3 values (x,y,z) per raindrop
+    const rainVelocities = new Float32Array(rainCount);
+    
+    // Set each raindrop to a random position above the scene
+    const areaSize = 200; // Rain area
+    const height = 100; // Rain starts from this height
+    
+    for (let i = 0; i < rainCount; i++) {
+        const i3 = i * 3;
+        
+        // Random position within a square area
+        rainPositions[i3] = (Math.random() * areaSize) - (areaSize/2);
+        rainPositions[i3 + 1] = height - Math.random() * 30; // Different heights
+        rainPositions[i3 + 2] = (Math.random() * areaSize) - (areaSize/2);
+        
+        // Increased velocity for faster rain
+        rainVelocities[i] = 0.5 + Math.random() * 0.8;
+    }
+    
+    rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+    
+    // Create material for raindrops - slightly transparent, blue-tinted
+    const rainMaterial = new THREE.PointsMaterial({
+        color: 0xaaccff,
+        size: 0.2,
+        transparent: true,
+        opacity: 0.6,
+        sizeAttenuation: true
+    });
+    
+    // Create the particle system
+    const rain = new THREE.Points(rainGeometry, rainMaterial);
+    rain.userData = { velocities: rainVelocities };
+    
+    return rain;
+}
+
+// Update rain animation in the render loop
+function animateRain() {
+    if (!rainSystem) return;
+    
+    const positions = rainSystem.geometry.attributes.position;
+    const velocities = rainSystem.userData.velocities;
+    
+    for (let i = 0; i < positions.count; i++) {
+        // Move raindrop down based on velocity
+        positions.setY(i, positions.getY(i) - velocities[i]);
+        
+        // If raindrop goes below a certain height, reset it to the top
+        if (positions.getY(i) < -5) {
+            positions.setY(i, 100 - Math.random() * 30);
+            
+            // Also randomize X and Z a bit for variation
+            const areaSize = 200;
+            positions.setX(i, (Math.random() * areaSize) - (areaSize/2));
+            positions.setZ(i, (Math.random() * areaSize) - (areaSize/2));
+        }
+    }
+    
+    positions.needsUpdate = true;
+}
+
+sceneToggle.addEventListener('change', function() {
+    if (this.checked) {
+        // Rising sea level
+        targetSeaLevel = floodedSeaLevel;
+        isRising = true;
+        
+        // Update switch state
+        switchStateEl.textContent = 'Flooding';
+        switchStateEl.classList.remove('normal-state');
+        switchStateEl.classList.add('flooded-state');
+        
+        // Add rain effect
+        if (!rainSystem) {
+            rainSystem = createRain();
+            scene.add(rainSystem);
+        }
+    } else {
+        // Lowering sea level
+        targetSeaLevel = normalSeaLevel;
+        isRising = false;
+        
+        // Update switch state
+        switchStateEl.textContent = 'Normal';
+        switchStateEl.classList.remove('flooded-state');
+        switchStateEl.classList.add('normal-state');
+        
+        // Remove rain effect
+        if (rainSystem) {
+            scene.remove(rainSystem);
+            rainSystem.geometry.dispose();
+            rainSystem.material.dispose();
+            rainSystem = null;
+        }
+    }
+    
+    if (!animationInProgress) {
+        animateSeaLevel();
+    }
+});
+
+// Function to animate sea level rising/falling
+function animateSeaLevel() {
+    animationInProgress = true;
+    
+    // Update boats with the ocean
+    function updateBoatsPosition() {
+        if (boats) {
+            boats.forEach(boat => {
+                // Keep the relative position to ocean surface
+                boat.position.y = ocean.surface.position.y + Math.sin(Date.now() * 0.001) * 0.2;
+            });
+        }
+    }
+    
+    function animate() {
+        if ((isRising && ocean.surface.position.y < targetSeaLevel) || 
+            (!isRising && ocean.surface.position.y > targetSeaLevel)) {
+            
+            // Calculate step - faster rising than falling for dramatic effect
+            const step = isRising ? 0.05 : 0.03;
+            
+            // Move ocean surface toward target
+            if (isRising) {
+                ocean.surface.position.y = Math.min(ocean.surface.position.y + step, targetSeaLevel);
+                // Also move deep ocean layer
+                ocean.deep.position.y = ocean.surface.position.y - 2;
+            } else {
+                ocean.surface.position.y = Math.max(ocean.surface.position.y - step, targetSeaLevel);
+                // Also move deep ocean layer
+                ocean.deep.position.y = ocean.surface.position.y - 2;
+            }
+            
+            updateBoatsPosition();
+            
+            requestAnimationFrame(animate);
+        } else {
+            animationInProgress = false;
+        }
+    }
+    
+    animate();
+}
+
 // Animation loop with water and boat movement
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Animate rain if present
+    animateRain();
     
     // Animate ocean waves with more realistic pattern
     if (ocean && ocean.surface && ocean.surface.geometry && 
@@ -2054,8 +2221,8 @@ function animate() {
     if (boats) {
         boats.forEach((boat, index) => {
             const time = Date.now() * 0.001;
-            // Gentle bobbing motion
-            boat.position.y = -3 + Math.sin(time * 0.8 + index * 0.2) * 0.2;
+            // Gentle bobbing motion - adjusted to be relative to ocean surface position
+            boat.position.y = ocean.surface.position.y + Math.sin(time * 0.8 + index * 0.2) * 0.2;
             // Gentle rotation
             boat.rotation.z = Math.sin(time * 0.5 + index * 0.3) * 0.05;
             boat.rotation.x = Math.sin(time * 0.7 + index * 0.1) * 0.03;
