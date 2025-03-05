@@ -84,6 +84,97 @@ function createSkybox() {
     return skybox;
 }
 
+// Create grey circular base at ocean level
+function createGreyBase() {
+    // Use the same radius as the bottom of the sloping terrain
+    const baseRadius = 30;
+    const baseGeometry = new THREE.CylinderGeometry(baseRadius, baseRadius, 0.5, 32);
+    const baseMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x808080, // Grey color
+        shininess: 10
+    });
+    
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    
+    // Position at ocean level, moved away from the island in the negative Z direction
+    base.position.set(14.8, 2, -75); // Move to negative Z direction so it doesn't overlap
+    
+    base.receiveShadow = true;
+    scene.add(base);
+    
+    return base;
+}
+
+// Create sloping terrain for the grey circular base
+function createGreyBaseSlope() {
+    // Create a truncated cone (frustum) for the sloping sides
+    // Top radius matches the grey base, bottom is moderately wider for a medium slope
+    const slopeGeometry = new THREE.CylinderGeometry(
+        30,     // Top radius - match the grey base
+        38,     // Bottom radius - moderate difference for medium slope (between 45 and 32)
+        7,      // Height - moderate height (between 5.5 and 9)
+        32,     // Radial segments for smoother appearance
+        9,      // Height segments to allow vertex manipulation
+        false   // Open-ended false (we want closed ends)
+    );
+    
+    // Slope material - darker grey than the base to suggest shadow
+    const slopeMaterial = new THREE.MeshPhongMaterial({
+        color: 0x606060,  // Darker grey than the top
+        shininess: 5,
+        flatShading: true  // Add some texture to the terrain
+    });
+    
+    const slope = new THREE.Mesh(slopeGeometry, slopeMaterial);
+    
+    // Position the slope to connect the grey base to the ocean
+    // Center X,Z with the grey base, Y positioned for moderate slope
+    slope.position.set(14.8, -1.5, -75);  // Y adjusted for moderate height
+    
+    // Add some random variation to the slope vertices for a more natural appearance
+    const positions = slope.geometry.attributes.position;
+    
+    for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const y = positions.getY(i);
+        const z = positions.getZ(i);
+        
+        // Don't modify vertices at the very top (keep it flat to match the base)
+        // and less modification near the top than bottom
+        if (y < 3) {
+            const distFromTop = 3.5 - y;  // Adjusted for new height
+            const randomNoise = (Math.random() - 0.5) * 0.1 * distFromTop;
+            
+            // More distortion as we get further from center
+            const distFromCenter = Math.sqrt(x * x + z * z);
+            const edgeNoise = (Math.random() - 0.5) * 0.15 * distFromCenter / 30;
+            
+            positions.setX(i, x + randomNoise + edgeNoise);
+            positions.setZ(i, z + randomNoise + edgeNoise);
+            
+            // Add some vertical variation too, but less of it
+            positions.setY(i, y + (Math.random() - 0.5) * 0.05 * distFromTop);
+        }
+    }
+    
+    // No longer adding rock details to the slope
+    // addGreyBaseRocks(slope); - removed
+    
+    slope.geometry.computeVertexNormals();
+    slope.castShadow = true;
+    slope.receiveShadow = true;
+    slope.renderOrder = -1; // Render before other objects
+    
+    scene.add(slope);
+    
+    return slope;
+}
+
+// Function is kept but no longer called
+function addGreyBaseRocks(slope) {
+    // Rock generation code remains but is no longer used
+}
+
 // Create house structure
 function createHouse() {
     const group = new THREE.Group();
@@ -809,122 +900,6 @@ function createMainIsland() {
     return island;
 }
 
-// Create a San Francisco skyline on the second island
-function createSFSkyline() {
-    const cityGroup = new THREE.Group();
-    
-    // Create a base for the city
-    const baseGeometry = new THREE.CylinderGeometry(15, 15, 2, 32);
-    const baseMaterial = new THREE.MeshPhongMaterial({ color: 0x808080 });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    base.position.set(-60, -2.5, 0);
-    base.receiveShadow = true;
-    cityGroup.add(base);
-    
-    // Function to create a building
-    function createBuilding(x, z, height, width, depth, color) {
-        const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
-        const buildingMaterial = new THREE.MeshPhongMaterial({ 
-            color: color,
-            shininess: 50
-        });
-        const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-        building.position.set(x, height/2, z);
-        building.castShadow = true;
-        building.receiveShadow = true;
-        return building;
-    }
-    
-    // Create Transamerica Pyramid (iconic SF building)
-    const pyramidGeometry = new THREE.ConeGeometry(2, 20, 4);
-    const pyramidMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xF5F5F5,
-        shininess: 80
-    });
-    const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
-    pyramid.position.set(-60, 10, 0);
-    pyramid.castShadow = true;
-    cityGroup.add(pyramid);
-    
-    // Create Salesforce Tower (tallest building)
-    const salesforceTower = createBuilding(-65, 3, 25, 3, 3, 0xA9A9A9);
-    cityGroup.add(salesforceTower);
-    
-    // Create other tall buildings
-    cityGroup.add(createBuilding(-55, 5, 18, 4, 4, 0xD3D3D3));
-    cityGroup.add(createBuilding(-63, -5, 15, 3, 3, 0xE0E0E0));
-    cityGroup.add(createBuilding(-57, -3, 20, 2.5, 2.5, 0xC0C0C0));
-    cityGroup.add(createBuilding(-52, 0, 16, 3, 3, 0xD3D3D3));
-    cityGroup.add(createBuilding(-68, 0, 14, 2, 2, 0xE8E8E8));
-    cityGroup.add(createBuilding(-58, 8, 17, 2, 2, 0xD3D3D3));
-    cityGroup.add(createBuilding(-50, -5, 13, 2.5, 2.5, 0xC0C0C0));
-    cityGroup.add(createBuilding(-70, 5, 12, 2, 2, 0xE0E0E0));
-    cityGroup.add(createBuilding(-65, -8, 15, 2, 2, 0xD3D3D3));
-    
-    // Add medium buildings
-    for (let i = 0; i < 15; i++) {
-        const x = -60 + (Math.random() * 20 - 10);
-        const z = Math.random() * 20 - 10;
-        const height = 5 + Math.random() * 8;
-        const width = 1.5 + Math.random() * 1.5;
-        const depth = 1.5 + Math.random() * 1.5;
-        const color = 0xA0A0A0 + Math.random() * 0x505050;
-        
-        cityGroup.add(createBuilding(x, z, height, width, depth, color));
-    }
-    
-    // Add small buildings/houses
-    for (let i = 0; i < 30; i++) {
-        const x = -60 + (Math.random() * 25 - 12.5);
-        const z = Math.random() * 25 - 12.5;
-        const height = 2 + Math.random() * 3;
-        const width = 1 + Math.random() * 1;
-        const depth = 1 + Math.random() * 1;
-        const color = 0xA0A0A0 + Math.random() * 0x505050;
-        
-        // Don't place buildings too close to the tallest ones
-        const distToCenter = Math.sqrt((x+60)*(x+60) + z*z);
-        if (distToCenter > 5) {
-            cityGroup.add(createBuilding(x, z, height, width, depth, color));
-        }
-    }
-    
-    scene.add(cityGroup);
-    return cityGroup;
-}
-
-// Create a second island (Marin Headlands)
-function createSecondIsland() {
-    const islandGeometry = new THREE.SphereGeometry(
-        15,  // smaller radius
-        32,  // widthSegments
-        32,  // heightSegments
-        0,   // phiStart
-        Math.PI * 2,  // phiLength
-        0,    // thetaStart - start from top pole
-        Math.PI/4     // thetaLength - reduced to quarter sphere (45 degrees)
-    );
-    const islandMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0x9b7653, // More brownish color for Marin Headlands
-        side: THREE.DoubleSide
-    });
-    const island = new THREE.Mesh(islandGeometry, islandMaterial);
-    island.position.set(-60, -3.5, 0); // Position to the left (west) of main island
-    island.receiveShadow = true;
-    scene.add(island);
-    
-    // Add some trees to the second island edges
-    for (let i = 0; i < 15; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 10 + Math.random() * 4;
-        const x = -60 + Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-        createTree(x, z, true); // true indicates it's on the second island
-    }
-    
-    return island;
-}
-
 // Create enhanced ocean with realistic water effect
 function createOcean() {
     // Create a larger ocean plane
@@ -1108,24 +1083,24 @@ function addBoats() {
 // Helper function to create a sailboat
 function createSailboat() {
     const boatGroup = new THREE.Group();
-    
-    // Boat hull
+        
+        // Boat hull
     const hullGeometry = new THREE.BoxGeometry(4, 1, 1.5);
     const hullMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+        const hull = new THREE.Mesh(hullGeometry, hullMaterial);
     hull.position.y = 0.5;
-    boatGroup.add(hull);
-    
+        boatGroup.add(hull);
+        
     // Boat sail
     const sailGeometry = new THREE.PlaneGeometry(2, 3);
-    const sailMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xFFFFFF,
-        side: THREE.DoubleSide
-    });
-    const sail = new THREE.Mesh(sailGeometry, sailMaterial);
-    sail.rotation.y = Math.PI / 2;
+            const sailMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xFFFFFF, 
+                side: THREE.DoubleSide 
+            });
+            const sail = new THREE.Mesh(sailGeometry, sailMaterial);
+            sail.rotation.y = Math.PI / 2;
     sail.position.set(0, 2.5, 0);
-    boatGroup.add(sail);
+            boatGroup.add(sail);
     
     // Boat mast
     const mastGeometry = new THREE.CylinderGeometry(0.05, 0.05, 4);
@@ -1135,8 +1110,8 @@ function createSailboat() {
     boatGroup.add(mast);
     
     boatGroup.castShadow = true;
-    
-    return boatGroup;
+        
+        return boatGroup;
 }
 
 // Add seagulls flying around
@@ -1328,12 +1303,699 @@ function addFog() {
     scene.fog = new THREE.FogExp2(0xcccccc, 0.0015);
 }
 
+// Create a detailed skyscraper for the grey base
+function createSkyscraper() {
+    const skyscraperGroup = new THREE.Group();
+    
+    // Main tower - tall rectangular prism (reduced dimensions)
+    const towerHeight = 40;  // Reduced from 60
+    const towerWidth = 7;    // Reduced from 10
+    const towerDepth = 7;    // Reduced from 10
+    
+    const towerGeometry = new THREE.BoxGeometry(towerWidth, towerHeight, towerDepth);
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x88ccff,
+        metalness: 0.9,
+        roughness: 0.1,
+        transparent: false,
+        reflectivity: 1.0,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1
+    });
+    
+    const structuralMaterial = new THREE.MeshPhongMaterial({
+        color: 0x888888,
+        shininess: 80
+    });
+    
+    // Create materials array for the tower with glass on most sides and structural elements
+    const towerMaterials = [
+        glassMaterial,     // right side
+        glassMaterial,     // left side
+        structuralMaterial, // top
+        structuralMaterial, // bottom
+        glassMaterial,     // front
+        glassMaterial      // back
+    ];
+    
+    const tower = new THREE.Mesh(towerGeometry, towerMaterials);
+    tower.position.y = towerHeight / 2;
+    tower.castShadow = true;
+    tower.receiveShadow = true;
+    skyscraperGroup.add(tower);
+    
+    // Add window details to the tower
+    addWindowsToTower(tower, towerWidth, towerHeight, towerDepth);
+    
+    // Create a tapered top section (reduced dimensions)
+    const topHeight = 10;  // Reduced from 15
+    const topBaseWidth = towerWidth;
+    const topTipWidth = towerWidth / 2;
+    
+    const topGeometry = new THREE.CylinderGeometry(
+        topTipWidth / 2, // top radius (narrower)
+        topBaseWidth / 2, // bottom radius (wider)
+        topHeight,
+        8 // octagonal
+    );
+    
+    const topMaterial = new THREE.MeshPhongMaterial({
+        color: 0x999999,
+        shininess: 100
+    });
+    
+    const top = new THREE.Mesh(topGeometry, topMaterial);
+    top.position.y = towerHeight + topHeight / 2;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    skyscraperGroup.add(top);
+    
+    // Add a spire/antenna at the top (reduced height)
+    const spireHeight = 7;  // Reduced from 10
+    const spireGeometry = new THREE.CylinderGeometry(0.1, 0.4, spireHeight, 8);
+    const spireMaterial = new THREE.MeshPhongMaterial({
+        color: 0xcccccc,
+        shininess: 100
+    });
+    
+    const spire = new THREE.Mesh(spireGeometry, spireMaterial);
+    spire.position.y = towerHeight + topHeight + spireHeight / 2;
+    spire.castShadow = true;
+    skyscraperGroup.add(spire);
+    
+    // Add a base/lobby area (reduced dimensions)
+    const baseHeight = 4;  // Reduced from 5
+    const baseWidth = towerWidth * 1.5;
+    const baseDepth = towerDepth * 1.5;
+    
+    const baseGeometry = new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth);
+    const baseMaterial = new THREE.MeshPhongMaterial({
+        color: 0x555555,
+        shininess: 60
+    });
+    
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.y = baseHeight / 2;
+    base.castShadow = true;
+    base.receiveShadow = true;
+    skyscraperGroup.add(base);
+    
+    // Add entrance (slightly reduced)
+    const entranceWidth = 2.5;  // Reduced from 3
+    const entranceHeight = 1.8;  // Reduced from 2
+    const entranceDepth = 0.5;
+    
+    const entranceGeometry = new THREE.BoxGeometry(entranceWidth, entranceHeight, entranceDepth);
+    const entranceMaterial = new THREE.MeshPhongMaterial({
+        color: 0x222222,
+        shininess: 100
+    });
+    
+    const entrance = new THREE.Mesh(entranceGeometry, entranceMaterial);
+    entrance.position.set(0, entranceHeight / 2, baseDepth / 2 + 0.01);
+    base.add(entrance);
+    
+    // Position the entire skyscraper at the center of the grey base
+    skyscraperGroup.position.set(14.8, 2, -75);
+    
+    scene.add(skyscraperGroup);
+    return skyscraperGroup;
+}
+
+// Helper function to add window details to the tower
+function addWindowsToTower(tower, width, height, depth) {
+    const windowRowCount = 20;
+    const windowColCount = 6;  // 3 columns per side
+    const windowWidth = 0.5;
+    const windowHeight = 1;
+    const windowDepth = 0.05;
+    
+    const windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
+    const windowMaterial = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        shininess: 100,
+        emissive: 0x555555
+    });
+    
+    // Add windows to front face
+    for (let row = 0; row < windowRowCount; row++) {
+        for (let col = 0; col < windowColCount / 2; col++) {
+            const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+            
+            // Improved positioning formula to ensure windows are centered and within the tower face
+            // For 3 columns, we want positions at roughly -width/3, 0, and width/3
+            const xPos = (col - 1) * (width / 3);
+            const yPos = (row - windowRowCount / 2) * (height / windowRowCount) + height / windowRowCount;
+            
+            windowMesh.position.set(xPos, yPos, depth / 2 + 0.01);
+            tower.add(windowMesh);
+            
+            // Add matching window to back face
+            const backWindowMesh = windowMesh.clone();
+            backWindowMesh.position.z = -depth / 2 - 0.01;
+            backWindowMesh.rotation.y = Math.PI;
+            tower.add(backWindowMesh);
+        }
+    }
+    
+    // Add windows to left and right faces
+    for (let row = 0; row < windowRowCount; row++) {
+        for (let col = 0; col < windowColCount / 2; col++) {
+            const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+            
+            // Improved positioning formula for side faces
+            const zPos = (col - 1) * (depth / 3);
+            const yPos = (row - windowRowCount / 2) * (height / windowRowCount) + height / windowRowCount;
+            
+            windowMesh.position.set(width / 2 + 0.01, yPos, zPos);
+            windowMesh.rotation.y = Math.PI / 2;
+            tower.add(windowMesh);
+            
+            // Add matching window to other side
+            const otherWindowMesh = windowMesh.clone();
+            otherWindowMesh.position.x = -width / 2 - 0.01;
+            otherWindowMesh.rotation.y = -Math.PI / 2;
+            tower.add(otherWindowMesh);
+        }
+    }
+}
+
+// Function to add multiple skyscrapers to the grey base
+function addCityscape() {
+    // Define the center point of the grey base
+    const centerX = 14.8;
+    const centerY = 2;
+    const centerZ = -75;
+    
+    // Define the radius of the grey base to stay within
+    const baseRadius = 28; // Slightly less than actual 30 to keep buildings fully on the base
+    
+    // Create an array to track building positions to prevent overlap
+    const buildingPositions = [];
+    
+    // Add fewer buildings with more spacing
+    const maxBuildingCount = 10; // Reduced from 15
+    
+    for (let i = 0; i < maxBuildingCount; i++) {
+        // Skip the first iteration since we already have a central skyscraper
+        if (i === 0) continue;
+        
+        // Generate random position within the circular base
+        let posX, posZ;
+        let validPosition = false;
+        let attempts = 0;
+        
+        // Try to find a valid position that doesn't overlap with existing buildings
+        while (!validPosition && attempts < 50) {
+            // Random angle and distance from center (more buildings toward the edges)
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * Math.random() * baseRadius; // Quadratic distribution for more buildings at the perimeter
+            
+            posX = centerX + Math.cos(angle) * distance;
+            posZ = centerZ + Math.sin(angle) * distance;
+            
+            // Check if this position is far enough from existing buildings
+            validPosition = true;
+            for (const pos of buildingPositions) {
+                const dx = posX - pos.x;
+                const dz = posZ - pos.z;
+                const minDistance = pos.radius + 5; // Increased from 3 to 5 for more spacing
+                
+                if (dx * dx + dz * dz < minDistance * minDistance) {
+                    validPosition = false;
+                    break;
+                }
+            }
+            
+            attempts++;
+        }
+        
+        if (!validPosition) continue; // Skip if we couldn't find a valid position
+        
+        // Determine building type based on random selection
+        const buildingType = Math.floor(Math.random() * 5); // 0-4 different building types
+        let building;
+        let buildingRadius;
+        
+        switch (buildingType) {
+            case 0:
+                // Tall rectangular skyscraper
+                building = createRectangularSkyscraper(posX, centerY, posZ);
+                buildingRadius = 4;
+                break;
+            case 1:
+                // Cylindrical tower
+                building = createCylindricalTower(posX, centerY, posZ);
+                buildingRadius = 3.5;
+                break;
+            case 2:
+                // Stepped pyramid-style building
+                building = createSteppedBuilding(posX, centerY, posZ);
+                buildingRadius = 5;
+                break;
+            case 3:
+                // Twin towers
+                building = createTwinTowers(posX, centerY, posZ);
+                buildingRadius = 5;
+                break;
+            case 4:
+                // Modern curved building
+                building = createCurvedBuilding(posX, centerY, posZ);
+                buildingRadius = 4;
+                break;
+        }
+        
+        // Add this building's position to our tracking array
+        buildingPositions.push({
+            x: posX,
+            z: posZ,
+            radius: buildingRadius
+        });
+    }
+}
+
+// Create a rectangular skyscraper with random height and proportions
+function createRectangularSkyscraper(x, y, z) {
+    const group = new THREE.Group();
+    
+    // Random dimensions
+    const height = 20 + Math.random() * 25;
+    const width = 4 + Math.random() * 3;
+    const depth = 4 + Math.random() * 3;
+    
+    // Main building
+    const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
+    
+    // Choose a random glass color
+    const glassColors = [0x88ccff, 0x99ddff, 0x77aacc, 0xaaddee, 0x66bbdd];
+    const glassColor = glassColors[Math.floor(Math.random() * glassColors.length)];
+    
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+        color: glassColor,
+        metalness: 0.9,
+        roughness: 0.1,
+        transparent: false,
+        reflectivity: 1.0,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1
+    });
+    
+    const structuralMaterial = new THREE.MeshPhongMaterial({
+        color: 0x888888,
+        shininess: 80
+    });
+    
+    // Create materials array for the building
+    const buildingMaterials = [
+        glassMaterial,     // right side
+        glassMaterial,     // left side
+        structuralMaterial, // top
+        structuralMaterial, // bottom
+        glassMaterial,     // front
+        glassMaterial      // back
+    ];
+    
+    const building = new THREE.Mesh(buildingGeometry, buildingMaterials);
+    building.position.y = height / 2;
+    building.castShadow = true;
+    building.receiveShadow = true;
+    group.add(building);
+    
+    // Add windows
+    addSimpleWindows(building, width, height, depth);
+    
+    // Add a roof structure (50% chance)
+    if (Math.random() > 0.5) {
+        const roofHeight = 2 + Math.random() * 3;
+        const roofGeometry = new THREE.BoxGeometry(width * 0.7, roofHeight, depth * 0.7);
+        const roofMaterial = new THREE.MeshPhongMaterial({
+            color: 0x999999,
+            shininess: 100
+        });
+        
+        const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+        roof.position.y = height + roofHeight / 2;
+        roof.castShadow = true;
+        group.add(roof);
+    }
+    
+    // Position the building
+    group.position.set(x, y, z);
+    
+    scene.add(group);
+    return group;
+}
+
+// Create a cylindrical tower
+function createCylindricalTower(x, y, z) {
+    const group = new THREE.Group();
+    
+    // Random dimensions
+    const height = 15 + Math.random() * 30;
+    const radius = 2 + Math.random() * 2;
+    
+    // Main tower
+    const towerGeometry = new THREE.CylinderGeometry(radius, radius, height, 16);
+    
+    // Choose a random material type
+    const materialType = Math.floor(Math.random() * 3);
+    let towerMaterial;
+    
+    if (materialType === 0) {
+        // Glass
+        towerMaterial = new THREE.MeshPhysicalMaterial({
+            color: 0x88ccff,
+            metalness: 0.9,
+            roughness: 0.1,
+            transparent: false,
+            reflectivity: 1.0
+        });
+    } else if (materialType === 1) {
+        // Concrete
+        towerMaterial = new THREE.MeshPhongMaterial({
+            color: 0xdddddd,
+            shininess: 30
+        });
+    } else {
+        // Metal
+        towerMaterial = new THREE.MeshStandardMaterial({
+            color: 0xaaaaaa,
+            metalness: 0.8,
+            roughness: 0.2
+        });
+    }
+    
+    const tower = new THREE.Mesh(towerGeometry, towerMaterial);
+    tower.position.y = height / 2;
+    tower.castShadow = true;
+    tower.receiveShadow = true;
+    group.add(tower);
+    
+    // Add circular windows
+    addCircularWindows(tower, radius, height);
+    
+    // Add a spire (30% chance)
+    if (Math.random() < 0.3) {
+        const spireHeight = height * 0.2;
+        const spireGeometry = new THREE.ConeGeometry(radius * 0.5, spireHeight, 16);
+        const spireMaterial = new THREE.MeshPhongMaterial({
+            color: 0xcccccc,
+            shininess: 100
+        });
+        
+        const spire = new THREE.Mesh(spireGeometry, spireMaterial);
+        spire.position.y = height + spireHeight / 2;
+        spire.castShadow = true;
+        group.add(spire);
+    }
+    
+    // Position the building
+    group.position.set(x, y, z);
+    
+    scene.add(group);
+    return group;
+}
+
+// Create a stepped/pyramid style building
+function createSteppedBuilding(x, y, z) {
+    const group = new THREE.Group();
+    
+    // Number of steps
+    const steps = 3 + Math.floor(Math.random() * 3);
+    
+    // Base dimensions
+    const baseWidth = 6 + Math.random() * 4;
+    const baseDepth = 6 + Math.random() * 4;
+    const totalHeight = 15 + Math.random() * 20;
+    
+    // Material
+    const buildingMaterial = new THREE.MeshPhongMaterial({
+        color: 0xdddddd,
+        shininess: 50
+    });
+    
+    // Create each step
+    for (let i = 0; i < steps; i++) {
+        const stepRatio = 1 - (i / steps);
+        const stepWidth = baseWidth * stepRatio;
+        const stepDepth = baseDepth * stepRatio;
+        const stepHeight = totalHeight / steps;
+        
+        const stepGeometry = new THREE.BoxGeometry(stepWidth, stepHeight, stepDepth);
+        const step = new THREE.Mesh(stepGeometry, buildingMaterial);
+        
+        step.position.y = (stepHeight * i) + (stepHeight / 2);
+        step.castShadow = true;
+        step.receiveShadow = true;
+        
+        group.add(step);
+        
+        // Add windows to each step
+        addSimpleWindows(step, stepWidth, stepHeight, stepDepth, 0.3, 0.6);
+    }
+    
+    // Position the building
+    group.position.set(x, y, z);
+    
+    scene.add(group);
+    return group;
+}
+
+// Create twin towers connected by bridges
+function createTwinTowers(x, y, z) {
+    const group = new THREE.Group();
+    
+    // Dimensions
+    const towerHeight = 25 + Math.random() * 20;
+    const towerWidth = 3 + Math.random() * 2;
+    const towerDepth = 3 + Math.random() * 2;
+    const towerSpacing = 3 + Math.random() * 2;
+    
+    // Materials
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x88ccff,
+        metalness: 0.9,
+        roughness: 0.1,
+        transparent: false,
+        reflectivity: 1.0
+    });
+    
+    const structuralMaterial = new THREE.MeshPhongMaterial({
+        color: 0x888888,
+        shininess: 80
+    });
+    
+    // Create first tower
+    const tower1Geometry = new THREE.BoxGeometry(towerWidth, towerHeight, towerDepth);
+    const tower1Materials = [
+        glassMaterial, glassMaterial, 
+        structuralMaterial, structuralMaterial,
+        glassMaterial, glassMaterial
+    ];
+    
+    const tower1 = new THREE.Mesh(tower1Geometry, tower1Materials);
+    tower1.position.set(-towerSpacing/2, towerHeight/2, 0);
+    tower1.castShadow = true;
+    tower1.receiveShadow = true;
+    group.add(tower1);
+    
+    // Create second tower
+    const tower2Geometry = new THREE.BoxGeometry(towerWidth, towerHeight, towerDepth);
+    const tower2 = new THREE.Mesh(tower2Geometry, tower1Materials);
+    tower2.position.set(towerSpacing/2, towerHeight/2, 0);
+    tower2.castShadow = true;
+    tower2.receiveShadow = true;
+    group.add(tower2);
+    
+    // Add windows to both towers
+    addSimpleWindows(tower1, towerWidth, towerHeight, towerDepth);
+    addSimpleWindows(tower2, towerWidth, towerHeight, towerDepth);
+    
+    // Add connecting bridges (2-3 of them)
+    const bridgeCount = 2 + Math.floor(Math.random() * 2);
+    
+    for (let i = 0; i < bridgeCount; i++) {
+        const bridgeHeight = 1.5;
+        const bridgeY = (towerHeight * (i + 1)) / (bridgeCount + 1);
+        
+        const bridgeGeometry = new THREE.BoxGeometry(towerSpacing, bridgeHeight, towerDepth * 0.6);
+        const bridgeMaterial = new THREE.MeshPhongMaterial({
+            color: 0x999999,
+            shininess: 80
+        });
+        
+        const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
+        bridge.position.y = bridgeY;
+        bridge.castShadow = true;
+        group.add(bridge);
+    }
+    
+    // Position the building
+    group.position.set(x, y, z);
+    
+    scene.add(group);
+    return group;
+}
+
+// Create a modern curved building
+function createCurvedBuilding(x, y, z) {
+    const group = new THREE.Group();
+    
+    // Dimensions
+    const height = 20 + Math.random() * 15;
+    const radius = 3 + Math.random() * 2;
+    
+    // Create a curved shape
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.quadraticCurveTo(radius * 1.5, 0, radius, radius);
+    shape.quadraticCurveTo(radius * 2, radius * 2, 0, radius * 2);
+    shape.quadraticCurveTo(-radius * 1.5, radius * 2, -radius, radius);
+    shape.quadraticCurveTo(-radius * 2, 0, 0, 0);
+    
+    // Extrude the shape
+    const extrudeSettings = {
+        steps: 1,
+        depth: height,
+        bevelEnabled: false
+    };
+    
+    const buildingGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    buildingGeometry.rotateX(-Math.PI / 2); // Rotate to make height go up
+    
+    // Material
+    const buildingMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x99ccdd,
+        metalness: 0.7,
+        roughness: 0.2,
+        reflectivity: 0.8
+    });
+    
+    const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+    building.castShadow = true;
+    building.receiveShadow = true;
+    group.add(building);
+    
+    // Add some horizontal accent lines
+    const accentCount = Math.floor(height / 5);
+    for (let i = 1; i <= accentCount; i++) {
+        const accentY = (height * i) / (accentCount + 1);
+        
+        const accentGeometry = new THREE.TorusGeometry(radius * 1.02, 0.1, 16, 32, Math.PI * 2);
+        const accentMaterial = new THREE.MeshPhongMaterial({
+            color: 0xffffff,
+            shininess: 100
+        });
+        
+        const accent = new THREE.Mesh(accentGeometry, accentMaterial);
+        accent.position.y = accentY;
+        accent.rotation.x = Math.PI / 2;
+        group.add(accent);
+    }
+    
+    // Position the building
+    group.position.set(x, y, z);
+    
+    scene.add(group);
+    return group;
+}
+
+// Helper function to add simple windows to rectangular buildings
+function addSimpleWindows(building, width, height, depth, windowWidth = 0.4, windowHeight = 0.8) {
+    const windowRowCount = Math.max(3, Math.floor(height / 3));
+    const windowColCount = Math.max(2, Math.floor(width / 2));
+    
+    const windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, 0.05);
+    const windowMaterial = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        shininess: 100,
+        emissive: 0x555555
+    });
+    
+    // Add windows to front and back
+    for (let row = 0; row < windowRowCount; row++) {
+        for (let col = 0; col < windowColCount; col++) {
+            // Calculate position
+            const xPos = (col - (windowColCount - 1) / 2) * (width / windowColCount);
+            const yPos = (row - (windowRowCount - 1) / 2) * (height / windowRowCount);
+            
+            // Front window
+            const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+            frontWindow.position.set(xPos, yPos, depth / 2 + 0.01);
+            building.add(frontWindow);
+            
+            // Back window
+            const backWindow = frontWindow.clone();
+            backWindow.position.z = -depth / 2 - 0.01;
+            backWindow.rotation.y = Math.PI;
+            building.add(backWindow);
+        }
+    }
+    
+    // Add windows to sides
+    const sideColCount = Math.max(2, Math.floor(depth / 2));
+    
+    for (let row = 0; row < windowRowCount; row++) {
+        for (let col = 0; col < sideColCount; col++) {
+            // Calculate position
+            const zPos = (col - (sideColCount - 1) / 2) * (depth / sideColCount);
+            const yPos = (row - (windowRowCount - 1) / 2) * (height / windowRowCount);
+            
+            // Right window
+            const rightWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+            rightWindow.position.set(width / 2 + 0.01, yPos, zPos);
+            rightWindow.rotation.y = Math.PI / 2;
+            building.add(rightWindow);
+            
+            // Left window
+            const leftWindow = rightWindow.clone();
+            leftWindow.position.x = -width / 2 - 0.01;
+            leftWindow.rotation.y = -Math.PI / 2;
+            building.add(leftWindow);
+        }
+    }
+}
+
+// Helper function to add circular windows to cylindrical buildings
+function addCircularWindows(tower, radius, height) {
+    const windowRowCount = Math.max(4, Math.floor(height / 3));
+    const windowColCount = 8; // Around the cylinder
+    
+    const windowRadius = 0.3;
+    const windowGeometry = new THREE.CircleGeometry(windowRadius, 8);
+    const windowMaterial = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        shininess: 100,
+        emissive: 0x555555
+    });
+    
+    for (let row = 0; row < windowRowCount; row++) {
+        for (let col = 0; col < windowColCount; col++) {
+            // Calculate position
+            const angle = (col / windowColCount) * Math.PI * 2;
+            const xPos = Math.cos(angle) * (radius + 0.01);
+            const zPos = Math.sin(angle) * (radius + 0.01);
+            const yPos = (row - (windowRowCount - 1) / 2) * (height / windowRowCount);
+            
+            const window = new THREE.Mesh(windowGeometry, windowMaterial);
+            window.position.set(xPos, yPos, zPos);
+            
+            // Rotate to face outward
+            window.lookAt(xPos * 2, yPos, zPos * 2);
+            
+            tower.add(window);
+        }
+    }
+}
+
 // Create all scene elements in the correct order
 const skybox = createSkybox();
+const greyBase = createGreyBase();
+const greyBaseSlope = createGreyBaseSlope();
+const skyscraper = createSkyscraper(); // Add the main skyscraper to the scene
+addCityscape(); // Add additional skyscrapers around the main one
 const mainIsland = createMainIsland();
 const slope = createSlopingTerrain();
-const secondIsland = createSecondIsland();
-const sfSkyline = createSFSkyline();
 const ocean = createOcean();
 const boats = addBoats();
 const seagulls = addSeagulls();
